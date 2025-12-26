@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Trade Blotter</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    <style>
+        body { background-color: #f8f9fa; }
+
+        /* Row Styles */
+        tr.main-row { cursor: pointer; }
+        tr.main-row:hover { background-color: #f1f1f1; }
+
+        /* Cancelled Trade Style */
+        tr.row-cancelled td {
+            text-decoration: line-through;
+            color: #adb5bd !important;
+        }
+        tr.row-cancelled .badge {
+            text-decoration: none;
+        }
+
+        /* Accordion Animation */
+        .accordion-icon { transition: transform 0.2s; }
+        tr[aria-expanded="true"] .accordion-icon { transform: rotate(90deg); }
+    </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+    <div class="container">
+        <a class="navbar-brand" href="/">
+            <i class="bi bi-graph-up-arrow"></i> SimpleTrade <small class="text-secondary fs-6">FO/MO Console</small>
+        </a>
+        <div class="d-flex gap-2">
+            <a href="/export" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
+            </a>
+            <a href="/book" class="btn btn-success btn-sm">
+                <i class="bi bi-plus-circle"></i> New Booking
+            </a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <!-- 1. ALERT MESSAGES (Fault Tolerance UI) -->
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill"></i> <span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- 2. SEARCH BAR -->
+    <form action="/" method="get" class="row g-2 align-items-center mb-3">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input type="text" name="search" class="form-control"
+                       placeholder="Search Ref, Counterparty..."
+                       th:value="${searchQuery}">
+                <button class="btn btn-primary" type="submit">Search</button>
+                <a href="/" class="btn btn-outline-secondary" th:if="${searchQuery}">Clear</a>
+            </div>
+        </div>
+    </form>
+
+    <!-- 3. BLOTTER TABLE -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light text-secondary small text-uppercase">
+                <tr>
+                    <th style="width: 40px;"></th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Ref</th>
+                    <th>Subject</th>
+                    <th>Counterparty</th>
+                    <th class="text-end">Notional ($)</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <th:block th:each="agg : ${tradeAggregates}">
+                    <!-- MAIN ROW -->
+                    <tr class="main-row"
+                        th:classappend="${agg.status == 'CANCELLED'} ? 'row-cancelled' : ''"
+                        th:data-bs-target="'#history-' + ${#strings.replace(agg.tradeRef, ':', '_')}"
+                        aria-expanded="false">
+
+                        <td class="text-center text-muted">
+                            <i class="bi bi-caret-right-fill accordion-icon"></i>
+                        </td>
+
+                        <td>
+                                    <span class="badge"
+                                          th:classappend="${agg.status == 'VERIFIED' ? 'bg-success' : (agg.status == 'CANCELLED' ? 'bg-danger' : 'bg-primary')}"
+                                          th:text="${agg.status}">
+                                    </span>
+                        </td>
+
+                        <td th:text="${#temporals.format(agg.latestEvent.eventTime, 'HH:mm:ss')}"></td>
+                        <td class="fw-bold text-dark font-monospace" th:text="${agg.tradeRef}"></td>
+                        <td th:text="${agg.latestEvent.subject}"></td>
+                        <td th:text="${agg.counterparty}"></td>
+                        <td class="text-end font-monospace"
+                            th:text="${#numbers.formatDecimal(agg.notional, 0, 'COMMA', 0, 'POINT')}"></td>
+
+                        <td class="text-end">
+                            <div class="btn-group" role="group" th:if="${agg.isModifiable}">
+                                <!-- Verify -->
+                                <form th:if="${agg.status != 'VERIFIED'}"
+                                      th:action="@{/verify/{id}(id=${agg.latestEvent.eventId})}" method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" title="Verify" onclick="event.stopPropagation()">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                </form>
+                                <!-- Amend -->
+                                <a th:href="@{/amend/{id}(id=${agg.latestEvent.eventId})}"
+                                   class="btn btn-sm btn-outline-dark" title="Amend"
+                                   onclick="event.stopPropagation()">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <!-- Cancel -->
+                                <form th:action="@{/cancel/{id}(id=${agg.latestEvent.eventId})}" method="post" class="d-inline"
+                                      onsubmit="return confirm('Confirm cancellation?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancel" onclick="event.stopPropagation()">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            </div>
+                            <span th:unless="${agg.isModifiable}" class="badge bg-secondary">LOCKED</span>
+                        </td>
+                    </tr>
+
+                    <!-- HISTORY ROW -->
+                    <tr class="collapse bg-light" th:id="'history-' + ${#strings.replace(agg.tradeRef, ':', '_')}">
+                        <td colspan="8" class="p-3">
+                            <div class="card card-body shadow-sm border-0">
+                                <h6 class="card-title text-muted border-bottom pb-2">
+                                    <i class="bi bi-clock-history"></i> Audit Trail
+                                </h6>
+                                <table class="table table-sm table-borderless mb-0">
+                                    <thead class="text-muted small">
+                                    <tr><th>Time</th><th>Action</th><th>Event ID</th><th>Payload</th></tr>
+                                    </thead>
+                                    <tbody>
+                                    <tr th:each="hist : ${agg.history}">
+                                        <td th:text="${#temporals.format(hist.eventTime, 'HH:mm:ss')}"></td>
+                                        <td><span class="badge bg-light text-dark border" th:text="${hist.eventType}"></span></td>
+                                        <td th:text="${hist.eventId}" class="small font-monospace"></td>
+                                        <td class="text-muted small text-truncate" style="max-width: 400px;" th:text="${hist.data}"></td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                </th:block>
+                <tr th:if="${#lists.isEmpty(tradeAggregates)}">
+                    <td colspan="8" class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-3"></i> No trades found.
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 4. PAGINATION CONTROLS -->
+        <div class="card-footer bg-white py-3" th:if="${totalPages > 1}">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item" th:classappend="${currentPage == 0} ? 'disabled'">
+                        <a class="page-link" th:href="@{/(page=${currentPage - 1}, search=${searchQuery})}">Previous</a>
+                    </li>
+                    <li class="page-item disabled">
+                            <span class="page-link">
+                                Page <span th:text="${currentPage + 1}"></span> of <span th:text="${totalPages}"></span>
+                            </span>
+                    </li>
+                    <li class="page-item" th:classappend="${currentPage + 1 >= totalPages} ? 'disabled'">
+                        <a class="page-link" th:href="@{/(page=${currentPage + 1}, search=${searchQuery})}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const rows = document.querySelectorAll('tr.main-row');
+        rows.forEach(row => {
+            row.addEventListener('click', function(e) {
+                if (e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+                const targetSelector = this.getAttribute('data-bs-target');
+                const targetEl = document.querySelector(targetSelector);
+                if (targetEl) {
+                    const bsCollapse = bootstrap.Collapse.getOrCreateInstance(targetEl, {toggle: false});
+                    bsCollapse.toggle();
+                    const isExpanded = this.getAttribute('aria-expanded') === 'true';
+                    this.setAttribute('aria-expanded', !isExpanded);
+                }
+            });
+        });
+    });
+</script>
+</body>
+</html>

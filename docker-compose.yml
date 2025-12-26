@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # 1. The Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: trading-db-container
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: trading_db
+    volumes:
+      # This maps your simplified SQL file to the container's init folder
+      - ./init_trading_db.sql:/docker-entrypoint-initdb.d/init_trading_db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d trading_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. The Web Interface Service (Adminer)
+  web-client:
+    image: adminer
+    container_name: trading-db-viewer
+    ports:
+      - "8081:8080" # Maps localhost:8081 -> container:8080 (Adminer)
+    depends_on:
+      - db
+
+  # 3. The Spring Boot Application
+  trading-app:
+    build: .
+    container_name: trading-app-container
+    ports:
+      - "8080:8080" # Maps localhost:8080 -> container:8080 (Spring Boot)
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/trading_db?stringtype=unspecified
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: password
+      # "validate" ensures Java checks the schema exists but doesn't alter it
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    depends_on:
+      db:
+        condition: service_healthy
