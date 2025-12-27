@@ -11,49 +11,50 @@
         <div class="col-md-6">
             <div class="card shadow">
                 <div class="card-header text-white"
-                     th:classappend="${mode == 'AMEND'} ? 'bg-warning' : 'bg-primary'">
-                    <h4 class="mb-0" th:text="${mode == 'AMEND'} ? 'Amend Trade' : 'Book New Trade'"></h4>
+                     th:classappend="${tradeSubmission.mode == 'AMEND'} ? 'bg-warning' : 'bg-primary'">
+                    <h4 class="mb-0" th:text="${tradeSubmission.mode == 'AMEND'} ? 'Amend Trade' : 'Book New Trade'"></h4>
                 </div>
                 <div class="card-body">
 
-                    <form action="/save" method="post">
-                        <input type="hidden" name="mode" th:value="${mode}">
-                        <input type="hidden" name="originalId" th:value="${trade.eventId}">
+                    <!-- Bind form to 'tradeSubmission' DTO -->
+                    <form action="/save" method="post" th:object="${tradeSubmission}">
+
+                        <!-- Hidden Fields mapped to DTO properties -->
+                        <input type="hidden" th:field="*{mode}">
+                        <input type="hidden" th:field="*{originalId}">
 
                         <div class="mb-3">
                             <label class="form-label">Product / Subject</label>
-                            <select name="subject" class="form-select" th:value="${trade.subject}">
-                                <option value="VANILLA_SWAPTION" th:selected="${trade.subject == 'VANILLA_SWAPTION'}">Vanilla Swaption</option>
-                                <option value="BERMUDAN_SWAPTION" th:selected="${trade.subject == 'BERMUDAN_SWAPTION'}">Bermudan Swaption</option>
-                                <option value="FX_OPTION" th:selected="${trade.subject == 'FX_OPTION'}">FX Option</option>
+                            <select th:field="*{subject}" class="form-select">
+                                <option value="VANILLA_SWAPTION">Vanilla Swaption</option>
+                                <option value="BERMUDAN_SWAPTION">Bermudan Swaption</option>
+                                <option value="FX_OPTION">FX Option</option>
                             </select>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label">Source System</label>
-                            <select name="source" class="form-select">
-                                <option value="INTERNAL_UI" selected>Internal UI</option>
-                                <option value="BLOOMBERG" th:selected="${trade.sourceSystem == 'BLOOMBERG'}">Bloomberg</option>
+                            <select th:field="*{source}" class="form-select">
+                                <option value="INTERNAL_UI">Internal UI</option>
+                                <option value="BLOOMBERG">Bloomberg</option>
                             </select>
                         </div>
 
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Counterparty</label>
-                                <input type="text" name="counterparty" class="form-control"
-                                       th:value="${counterparty}" placeholder="JPMORGAN" required>
+                                <input type="text" th:field="*{counterparty}" class="form-control" placeholder="JPMORGAN" required>
                             </div>
                             <div class="col-6 mb-3">
                                 <label class="form-label">Notional ($)</label>
-                                <input type="number" name="notional" class="form-control"
-                                       th:value="${notional}" placeholder="1000000" required>
+                                <input type="number" th:field="*{notional}" class="form-control" placeholder="1000000" required>
                             </div>
                         </div>
 
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-lg"
-                                    th:classappend="${mode == 'AMEND'} ? 'btn-warning' : 'btn-primary'">
-                                <span th:text="${mode == 'AMEND'} ? 'Submit Amendment' : 'Book Trade'"></span>
+                                    th:classappend="${tradeSubmission.mode == 'AMEND'} ? 'btn-warning' : 'btn-primary'">
+                                <span th:text="${tradeSubmission.mode == 'AMEND'} ? 'Submit Amendment' : 'Book Trade'"></span>
                             </button>
                             <a href="/" class="btn btn-link text-secondary">Cancel</a>
                         </div>

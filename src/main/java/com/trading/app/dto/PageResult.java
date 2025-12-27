@@ -1,4 +1,4 @@
-package com.trading.app;
+package com.trading.app.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

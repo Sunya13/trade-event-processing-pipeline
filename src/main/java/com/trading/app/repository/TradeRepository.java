@@ -1,5 +1,6 @@
-package com.trading.app;
+package com.trading.app.repository;
 
+import com.trading.app.model.TradeEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
