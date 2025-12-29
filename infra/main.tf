@@ -7,9 +7,8 @@ resource "cockroach_cluster" "db" {
   cloud_provider = "GCP"
 
   serverless = {
-    spend_limit = 0
     usage_limits = {
-      request_unit_limit = 10000000 # Optional: Generous free tier limit
+      request_unit_limit = 10000000 # Monthly request unit limit
     }
   }
 
