@@ -1,46 +1,52 @@
 version: '3.8'
 
 services:
-  # 1. The Database Service
+  # The PostgreSQL Database
   db:
-    image: postgres:15-alpine
-    container_name: trading-db-container
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: trading_db
-    volumes:
-      # This maps your simplified SQL file to the container's init folder
-      - ./init_trading_db.sql:/docker-entrypoint-initdb.d/init_trading_db.sql
+    image: postgres:15
+    container_name: trading-db
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_DB: trading_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d trading_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
-
-  # 2. The Web Interface Service (Adminer)
-  web-client:
+  # Web-Based Database Viewer
+  # Access at http://localhost:8081
+  adminer:
     image: adminer
-    container_name: trading-db-viewer
+    container_name: trading-db-admin
+    restart: always
     ports:
-      - "8081:8080" # Maps localhost:8081 -> container:8080 (Adminer)
+      - "8081:8080"
     depends_on:
       - db
-
-  # 3. The Spring Boot Application
-  trading-app:
+  # The Spring Boot Application
+  backend:
     build: .
-    container_name: trading-app-container
+    container_name: trading-backend
     ports:
-      - "8080:8080" # Maps localhost:8080 -> container:8080 (Spring Boot)
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/trading_db?stringtype=unspecified
-      SPRING_DATASOURCE_USERNAME: admin
-      SPRING_DATASOURCE_PASSWORD: password
-      # "validate" ensures Java checks the schema exists but doesn't alter it
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      # MOUNT LOCAL CONFIG to the container's config location.
+      - ./src/main/resources:/app/config
+    environment:
+      - SPRING_CONFIG_LOCATION=file:/app/config/
+      # Override DB Host to point to the 'db' service defined above
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/trading_db
+      - SPRING_DATASOURCE_USERNAME=admin
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_PROFILES_ACTIVE=dev
+
+volumes:
+  postgres_data:

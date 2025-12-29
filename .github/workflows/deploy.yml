@@ -1,0 +1,89 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REPO_NAME: trading-backend-repo
+  IMAGE_NAME: trading-app
+  TF_STATE_BUCKET: ${{ vars.GCP_TF_STATE_BUCKET }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # 1. Scope this job to the 'production' environment secrets
+    environment: production
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Authenticate to Google Cloud
+      - name: Google Auth
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      # 2. Enable Required APIs
+      - name: Enable Google Cloud APIs
+        run: |
+          gcloud services enable artifactregistry.googleapis.com run.googleapis.com
+
+      # 3. Configure Docker to use Google Artifact Registry
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      # 4. Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+
+      # 5. Initialize Terraform
+      # We verify infrastructure exists before pushing docker image
+      - name: Terraform Init & Apply (Infrastructure)
+        working-directory: ./infra
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_cockroach_api_key: ${{ secrets.COCKROACH_API_KEY }}
+          TF_VAR_db_password: ${{ secrets.DB_PASS }}
+          TF_VAR_service_token: ${{ secrets.SERVICE_TOKEN }}
+        run: |
+          terraform init -backend-config="bucket=$TF_STATE_BUCKET"
+          # Target only the repo first to ensure it exists for docker push
+          terraform apply -target=google_artifact_registry_repository.repo -auto-approve
+
+      # 6. Build and Push Docker Image
+      - name: Build and Push Container
+        run: |
+          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:latest"
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+      # 7. Deploy Cloud Run Service via Terraform
+      # Now that image exists, we deploy the full stack (Cloud Run + DB Cluster)
+      - name: Terraform Apply (Full Deployment)
+        working-directory: ./infra
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_cockroach_api_key: ${{ secrets.COCKROACH_API_KEY }}
+          TF_VAR_db_password: ${{ secrets.DB_PASS }}
+          TF_VAR_service_token: ${{ secrets.SERVICE_TOKEN }}
+        run: terraform apply -auto-approve
