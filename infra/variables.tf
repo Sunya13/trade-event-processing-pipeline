@@ -26,3 +26,8 @@ variable "service_token" {
   type        = string
   sensitive   = true
 }
+
+variable "app_cors_allowed_origins" {
+  description = "Allowed origins for CORS (e.g. https://your-frontend.pages.dev)"
+  type        = string
+}
