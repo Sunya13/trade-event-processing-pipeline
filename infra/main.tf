@@ -5,10 +5,17 @@
 resource "cockroach_cluster" "db" {
   name           = "trading-cluster"
   cloud_provider = "GCP"
-  regions        = [var.region]
+
   serverless = {
-    spend_limit = 0 # Ensures it stays FREE
+    spend_limit = 0
+    usage_limits = {
+      request_unit_limit = 10000000 # Optional: Generous free tier limit
+    }
   }
+
+  regions = [{
+    name = var.region
+  }]
 }
 
 resource "cockroach_sql_user" "app_user" {
@@ -76,10 +83,15 @@ resource "google_cloud_run_service" "backend" {
         }
 
         # === SECURITY CONFIGURATION ===
-        # The frontend (Cloudflare) must pass this token in the 'X-Service-Token' header.
         env {
           name = "APP_SERVICE_TOKEN"
           value = var.service_token
+        }
+
+        # Inject CORS Origin
+        env {
+          name = "APP_CORS_ALLOWED_ORIGINS"
+          value = var.app_cors_allowed_origins
         }
       }
     }
@@ -91,8 +103,7 @@ resource "google_cloud_run_service" "backend" {
   }
 }
 
-# Make Service Public ( protected by our App Service Token)
-# This allows Cloudflare to reach it.
+# Make Service Network-Public (Application Security handles Auth)
 data "google_iam_policy" "noauth" {
   binding {
     role = "roles/run.invoker"
