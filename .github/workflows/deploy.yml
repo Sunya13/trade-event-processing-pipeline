@@ -30,7 +30,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Authenticate to Google Cloud
       - name: Google Auth
         uses: google-github-actions/auth@v1
         with:
@@ -39,23 +38,15 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      # 2. Enable Required APIs
-      - name: Enable Google Cloud APIs
-        run: |
-          gcloud services enable artifactregistry.googleapis.com run.googleapis.com
 
-      # 3. Configure Docker to use Google Artifact Registry
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
-      # 4. Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_wrapper: false
 
-      # 5. Initialize Terraform
-      # We verify infrastructure exists before pushing docker image
       - name: Terraform Init & Apply (Infrastructure)
         working-directory: ./infra
         env:
@@ -66,18 +57,14 @@ jobs:
           TF_VAR_service_token: ${{ secrets.SERVICE_TOKEN }}
         run: |
           terraform init -backend-config="bucket=$TF_STATE_BUCKET"
-          # Target only the repo first to ensure it exists for docker push
           terraform apply -target=google_artifact_registry_repository.repo -auto-approve
 
-      # 6. Build and Push Docker Image
       - name: Build and Push Container
         run: |
           IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:latest"
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
 
-      # 7. Deploy Cloud Run Service via Terraform
-      # Now that image exists, we deploy the full stack (Cloud Run + DB Cluster)
       - name: Terraform Apply (Full Deployment)
         working-directory: ./infra
         env:
